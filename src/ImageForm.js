@@ -1,107 +1,114 @@
-import { useState } from "react";
-import axios from "axios";
+import React, { useState } from "react";
 
-const ImageForm = ({ onGenerate }) => {
+export default function ImageForm({ onGenerate, onLoadingStateChange }) {
   const [prompt, setPrompt] = useState("");
-  const [width, setWidth] = useState(1024);
-  const [height, setHeight] = useState(1024);
-  const [loading, setLoading] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState(null);
+  const [style, setStyle] = useState("realistic");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const generateImage = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      const response = await axios.get(
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`,
-        {
-          params: {
-            width,
-            height,
-            nologo: true,
-            quality: 100,
-          },
-          responseType: "blob",
-        }
-      );
+    if (!prompt.trim()) return;
 
-      const imageUrl = URL.createObjectURL(response.data);
-      setGeneratedImage(imageUrl);
+    try {
+      setIsLoading(true);
+      onLoadingStateChange(true);
+
+      const response = await fetch(
+        "https://image.pollinations.ai/prompt/" +
+          encodeURIComponent(`${prompt} ${style}`)
+      );
+      const imageUrl = response.url;
+
       onGenerate(imageUrl);
     } catch (error) {
       console.error("Error generating image:", error);
-      alert("Error generating image. Please try again.");
+    } finally {
+      setIsLoading(false);
+      onLoadingStateChange(false);
     }
-    setLoading(false);
   };
 
   return (
     <form
-      onSubmit={generateImage}
-      style={{
-        color: "white",
-        display: "flex",
-        flexDirection: "column",
-        gap: "1rem",
-      }}
+      onSubmit={handleSubmit}
+      style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
     >
-      <div>
-        <label>Image Prompt:</label>
+      <div style={{ position: "relative" }}>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          style={{ width: "100%", padding: "0.5rem", color: "black" }}
-          required
+          placeholder="Describe the image you want to generate..."
+          style={{
+            width: "100%",
+            minHeight: "100px",
+            padding: "1rem",
+            borderRadius: "8px",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
+            background: "rgba(0, 0, 0, 0.5)",
+            color: "#ffffff",
+            resize: "vertical",
+            fontFamily: "inherit",
+            fontSize: "1rem",
+          }}
+          disabled={isLoading}
         />
+        {isLoading && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0, 0, 0, 0.7)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "8px",
+            }}
+          >
+            <div className="spinner" />
+          </div>
+        )}
       </div>
 
-      <div style={{ display: "flex", gap: "1rem" }}>
-        <div>
-          <label>Width:</label>
-          <input
-            type="number"
-            value={width}
-            onChange={(e) => setWidth(e.target.value)}
-            style={{ width: "100px", padding: "0.5rem", color: "black" }}
-          />
-        </div>
-
-        <div>
-          <label>Height:</label>
-          <input
-            type="number"
-            value={height}
-            onChange={(e) => setHeight(e.target.value)}
-            style={{ width: "100px", padding: "0.5rem", color: "black" }}
-          />
-        </div>
-      </div>
+      <select
+        value={style}
+        onChange={(e) => setStyle(e.target.value)}
+        style={{
+          padding: "0.5rem 1rem",
+          borderRadius: "8px",
+          border: "1px solid rgba(255, 255, 255, 0.2)",
+          background: "rgba(0, 0, 0, 0.5)",
+          color: "#ffffff",
+          cursor: "pointer",
+        }}
+        disabled={isLoading}
+      >
+        <option value="realistic">Realistic</option>
+        <option value="cartoon">Cartoon</option>
+        <option value="abstract">Abstract</option>
+        <option value="fantasy">Fantasy</option>
+      </select>
 
       <button
         type="submit"
-        disabled={loading}
         style={{
-          padding: "0.5rem 1rem",
-          background: loading ? "gray" : "#4CAF50",
+          padding: "0.75rem 1rem",
+          borderRadius: "8px",
           border: "none",
-          borderRadius: "4px",
-          cursor: loading ? "not-allowed" : "pointer",
+          background: "linear-gradient(45deg, #ff7eb3, #ff758c)",
+          color: "#ffffff",
+          fontWeight: "bold",
+          cursor: "pointer",
+          transition: "transform 0.2s ease",
+          opacity: isLoading ? 0.7 : 1,
+          pointerEvents: isLoading ? "none" : "auto",
         }}
+        disabled={isLoading}
       >
-        {loading ? "Generating..." : "Create Image"}
+        {isLoading ? "Generating..." : "Generate Image"}
       </button>
-
-      {generatedImage && (
-        <div style={{ marginTop: "1rem" }}>
-          <img
-            src={generatedImage}
-            alt="Generated content"
-            style={{ maxWidth: "200px", marginTop: "1rem" }}
-          />
-        </div>
-      )}
     </form>
   );
-};
-
-export default ImageForm;
+}

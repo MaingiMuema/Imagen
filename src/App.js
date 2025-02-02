@@ -5,11 +5,15 @@ import ImageForm from "./ImageForm";
 export default function App() {
   const mountRef = useRef(null);
   const [generatedImage, setGeneratedImage] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     // Set up scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
+
+    // Add background gradient
+    const gradientTexture = new THREE.CanvasTexture(createGradientCanvas());
+    scene.background = gradientTexture;
 
     // Set up camera
     const camera = new THREE.PerspectiveCamera(
@@ -21,13 +25,18 @@ export default function App() {
     camera.position.z = 5;
 
     // Set up renderer
-    const renderer = new THREE.WebGLRenderer();
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     mountRef.current.appendChild(renderer.domElement);
 
-    // Add cube
+    // Add cube with texture
     const geometry = new THREE.BoxGeometry();
-    const material = new THREE.MeshStandardMaterial({ color: 0xff69b4 });
+    const textureLoader = new THREE.TextureLoader();
+    const material = new THREE.MeshStandardMaterial({
+      map: textureLoader.load("/textures/wood.jpg"),
+      roughness: 0.1,
+      metalness: 0.5,
+    });
     const cube = new THREE.Mesh(geometry, material);
     scene.add(cube);
 
@@ -39,11 +48,26 @@ export default function App() {
     pointLight.position.set(10, 10, 10);
     scene.add(pointLight);
 
+    // Add floating particles
+    const particles = createParticles();
+    scene.add(particles);
+
     // Animation
+    const clock = new THREE.Clock();
     const animate = () => {
       requestAnimationFrame(animate);
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.01;
+
+      const elapsedTime = clock.getElapsedTime();
+
+      // Cube animation
+      cube.rotation.x = elapsedTime * 0.5;
+      cube.rotation.y = elapsedTime * 0.3;
+      cube.position.y = Math.sin(elapsedTime) * 0.5;
+
+      // Particles animation
+      particles.rotation.x = elapsedTime * 0.1;
+      particles.rotation.y = elapsedTime * 0.2;
+
       renderer.render(scene, camera);
     };
     animate();
@@ -66,6 +90,47 @@ export default function App() {
     };
   }, []);
 
+  // Create gradient background
+  const createGradientCanvas = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+
+    const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gradient.addColorStop(0, "#1a1a2e");
+    gradient.addColorStop(1, "#16213e");
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 256, 256);
+
+    return canvas;
+  };
+
+  // Create floating particles
+  const createParticles = () => {
+    const particlesCount = 500;
+    const positions = new Float32Array(particlesCount * 3);
+
+    for (let i = 0; i < particlesCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 10;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 10;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 10;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+      color: "#ffffff",
+      size: 0.05,
+      transparent: true,
+      opacity: 0.5,
+    });
+
+    return new THREE.Points(geometry, material);
+  };
+
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       <div
@@ -80,20 +145,28 @@ export default function App() {
           left: "50%",
           transform: "translate(-50%, -50%)",
           zIndex: 1000,
-          background: "rgba(0, 0, 0, 0.7)",
+          background: "rgba(0, 0, 0, 0.8)",
           padding: "2rem",
           borderRadius: "15px",
           width: "90%",
           maxWidth: "500px",
+          backdropFilter: "blur(10px)",
+          boxShadow: "0 0 20px rgba(0, 0, 0, 0.5)",
+          transition: "all 0.3s ease",
         }}
       >
-        <ImageForm onGenerate={setGeneratedImage} />
+        <ImageForm
+          onGenerate={setGeneratedImage}
+          onLoadingStateChange={setIsLoading}
+        />
         {generatedImage && (
           <div
             style={{
               marginTop: "1rem",
               display: "flex",
               justifyContent: "center",
+              opacity: isLoading ? 0.5 : 1,
+              transition: "opacity 0.3s ease",
             }}
           >
             <img
@@ -104,6 +177,7 @@ export default function App() {
                 maxHeight: "300px",
                 objectFit: "contain",
                 borderRadius: "8px",
+                boxShadow: "0 0 10px rgba(0, 0, 0, 0.3)",
               }}
             />
           </div>
