@@ -71,11 +71,11 @@ async function generateImage(
   prompt: string,
   index: number,
   outputDir: string,
-  retries = 3
+  retries = 10
 ): Promise<string> {
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
     `${prompt} ${index}`
-  )}?seed=${index}&nologo=true&quality=100&width=1024&height=1024`;
+  )}?seed=${index}&nologo=true&quality=100&width=1920&height=1080`;
 
   const filename = path.join(
     outputDir,
@@ -102,7 +102,7 @@ async function generateImage(
       const buffer = Buffer.from(response.data);
 
       const processedBuffer = await sharp(buffer)
-        .resize(1024, 1024, { fit: "contain", background: "black" })
+        .resize(1920, 1080, { fit: "contain", background: "black" })
         .jpeg({ quality: 90 })
         .toBuffer();
 
@@ -127,16 +127,21 @@ export async function generateFrames(
   basePrompt: string,
   totalFrames: number,
   outputDir: string,
+  fps: number = 30,
+  duration?: number,
   onProgress?: ProgressCallback
 ): Promise<string[]> {
-  console.log(`Starting generation of ${totalFrames} frames...`);
+  console.log(`Starting generation of ${totalFrames} frames at ${fps}fps...`);
   const frames: string[] = new Array(totalFrames);
   const batchSize = 5;
   const batches = Math.ceil(totalFrames / batchSize);
   let successfulFrames = 0;
 
-  // Initialize the story
-  await promptGenerator.initializeStory(basePrompt);
+  // Calculate duration if not provided
+  const videoDuration = duration || totalFrames / fps;
+
+  // Initialize the story with temporal context
+  await promptGenerator.initializeStory(basePrompt, fps, videoDuration);
 
   for (let batchIndex = 0; batchIndex < batches; batchIndex++) {
     const start = batchIndex * batchSize;
@@ -237,6 +242,26 @@ export async function createVideo(
   }
 
   return new Promise((resolve, reject) => {
+    // Build complex filtergraph for visual effects
+    const filters = [
+      // Color and visual enhancement
+      "colorlevels=rimin=0.058:gimin=0.058:bimin=0.058:rimax=0.977:gimax=0.977:bimax=0.977", // Enhance contrast
+      "eq=saturation=1.2:contrast=1.1:brightness=0.05", // Slight color boost
+      "unsharp=3:3:1.5:3:3:0.5", // Sharpen details
+
+      // Cinematic effects
+      "vignette=PI/4", // Subtle vignette effect
+      "fps=" + fps, // Ensure consistent frame rate
+
+      // Light effects and glow
+      "curves=r='0/0 0.5/0.4 1/1':g='0/0 0.5/0.4 1/1':b='0/0 0.5/0.4 1/1'", // Enhance highlights
+      "gblur=sigma=0.5:steps=1", // Subtle bloom effect
+
+      // Temporal smoothing
+      "minterpolate=mi_mode=mci:me_mode=bidir:mc_mode=aobmc:mb_size=16:vsbmc=1:fps=" +
+        fps,
+    ].join(",");
+
     const args = [
       "-y",
       "-framerate",
@@ -245,6 +270,8 @@ export async function createVideo(
       "sequence",
       "-i",
       path.join(imageDir, "frame_%04d.jpg"),
+      "-filter_complex",
+      filters,
       "-c:v",
       "libx264",
       "-pix_fmt",
@@ -252,9 +279,15 @@ export async function createVideo(
       "-preset",
       "medium",
       "-crf",
-      "23",
+      "18", // Higher quality
       "-movflags",
       "+faststart",
+      "-tune",
+      "film", // Optimize for film-like content
+      "-profile:v",
+      "high",
+      "-level",
+      "4.1",
       outputPath,
     ];
 

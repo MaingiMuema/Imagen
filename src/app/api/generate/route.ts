@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
-  // Duration must be between 2 and 300 seconds
-  if (duration < 2 || duration > 300) {
+  // Duration must be between 1 and 300 seconds
+  if (duration < 1 || duration > 300) {
     return NextResponse.json(
       { error: "Duration must be between 2 and 300 seconds" },
       { status: 400 }
@@ -85,7 +85,9 @@ export async function GET(req: NextRequest) {
             prompt,
             totalFrames,
             framesDir,
-            async (progress) => {
+            fps,
+            duration,
+            async (progress: GenerationProgress) => {
               await sendUpdate({
                 ...progress,
                 message: `Generating frame ${progress.currentFrame} of ${progress.totalFrames}`,

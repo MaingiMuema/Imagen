@@ -11,6 +11,9 @@ export class PromptGenerator {
   private memory: StoryFrame[] = [];
   private baseContext: string = "";
   private initialized: boolean = false;
+  private fps: number = 30;
+  private duration: number = 0;
+  private frameTimeMs: number = 0;
 
   constructor() {
     this.together = new Together({
@@ -29,32 +32,67 @@ export class PromptGenerator {
       .map((frame) => `Frame ${frame.frameNumber}: ${frame.context}`)
       .join("\n");
 
+    const currentTimeMs = (this.memory.length + 1) * this.frameTimeMs;
+    const totalTimeMs = totalFrames * this.frameTimeMs;
+    const currentTimeSec = (currentTimeMs / 1000).toFixed(2);
+    const totalTimeSec = (totalTimeMs / 1000).toFixed(2);
+
     return `You are a creative visual storyteller. Create a detailed scene description for frame ${
       this.memory.length + 1
-    } of ${totalFrames} 
+    } of ${totalFrames} (at ${currentTimeSec}s of ${totalTimeSec}s, ${
+      this.fps
+    }fps)
         based on this story concept: "${userPrompt}".
+        
+        Temporal Context:
+        - Each frame represents ${(this.frameTimeMs / 1000).toFixed(3)} seconds
+        - Frame transition should be smooth and match the timing
+        - Consider the frame rate (${
+          this.fps
+        }fps) when describing motion and changes
         
         Previous frames context:
         ${previousContext}
 
-        Generate a coherent next scene that progresses the story naturally. 
-        Focus on visual details like:
-        - Scene composition and setting
-        - Character actions and expressions
-        - Lighting and atmosphere
-        - Camera angles and movement
+        Generate a coherent next scene that progresses the story naturally, considering:
         
-        Keep transitions smooth and logical between scenes.
+        Visual Elements and VFX:
+        - Scene composition with dynamic camera work (dolly, pan, tracking shots)
+        - Character actions with dramatic expressions and motion trails
+        - Advanced lighting (volumetric rays, lens flares, dynamic shadows)
+        - Atmospheric effects (mist, particles, energy fields)
+        - Cinematic color grading and mood enhancement
+        - VFX elements (glowing auras, particle systems, magical effects)
+        - Environmental effects (rain, snow, fog, dust storms)
+        - Motion blur and speed lines for dynamic action
+        - Reflective and refractive surfaces with distortion
+        
+        Temporal Guidelines and VFX Timing:
+        - Ensure movement and changes are physically possible within ${(
+          this.frameTimeMs / 1000
+        ).toFixed(3)} seconds
+        - Maintain consistent motion across frames
+        - Scale action intensity to match the frame timing
         
         Response format: Provide only the scene description, no explanations or additional text.
         Keep the description concise but vivid (50-100 words).`;
   }
 
-  public async initializeStory(basePrompt: string): Promise<void> {
+  public async initializeStory(
+    basePrompt: string,
+    fps: number = 30,
+    duration: number = 0
+  ): Promise<void> {
     this.baseContext = basePrompt;
     this.memory = [];
+    this.fps = fps;
+    this.duration = duration;
+    this.frameTimeMs =
+      duration > 0 ? (duration * 1000) / (fps * duration) : 1000 / fps;
     this.initialized = true;
-    console.log("Story initialized with prompt:", basePrompt);
+    console.log(
+      `Story initialized with prompt: ${basePrompt}, FPS: ${fps}, Duration: ${duration}s`
+    );
   }
 
   public async generateFramePrompt(

@@ -164,14 +164,14 @@ export default function Home() {
                       id="duration"
                       value={duration}
                       onChange={(e) => setDuration(Number(e.target.value))}
-                      min={2}
+                      min={1}
                       max={300}
                       className="w-full p-3 rounded-lg bg-black/30 text-white focus:outline-none"
                       required
                     />
                   </div>
                   <p className="mt-2 text-sm text-gray-400">
-                    2-300 seconds • 30 frames per second
+                    1-300 seconds • 30 frames per second
                   </p>
                 </div>
 
