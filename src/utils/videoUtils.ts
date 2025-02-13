@@ -3,6 +3,7 @@ import path from "path";
 import { spawn } from "child_process";
 import axios from "axios";
 import sharp from "sharp";
+import { promptGenerator } from "./promptGenerator";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -12,6 +13,11 @@ export interface GenerationProgress {
   totalFrames: number;
   currentFrame: number;
   stage: "generating" | "processing" | "complete";
+  currentPrompt?: string;
+  storyProgress?: Array<{
+    frameNumber: number;
+    context: string;
+  }>;
 }
 
 type ProgressCallback = (progress: GenerationProgress) => Promise<void>;
@@ -79,7 +85,6 @@ async function generateImage(
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       if (attempt > 0) {
-        // Add exponential backoff between retries
         await delay(Math.min(1000 * Math.pow(2, attempt), 10000));
       }
 
@@ -87,7 +92,7 @@ async function generateImage(
         method: "get",
         url,
         responseType: "arraybuffer",
-        timeout: 60000, // Increased timeout to 60 seconds
+        timeout: 60000,
         headers: {
           Accept: "image/jpeg",
           "User-Agent": "Mozilla/5.0",
@@ -96,22 +101,19 @@ async function generateImage(
 
       const buffer = Buffer.from(response.data);
 
-      // Ensure consistent image dimensions
       const processedBuffer = await sharp(buffer)
         .resize(1024, 1024, { fit: "contain", background: "black" })
         .jpeg({ quality: 90 })
         .toBuffer();
 
       await fs.writeFile(filename, processedBuffer);
-
-      // Verify the file was written
       await fs.access(filename);
 
       return filename;
     } catch (error) {
       console.error(`Attempt ${attempt + 1} failed for frame ${index}:`, error);
       if (attempt === retries - 1) throw error;
-      await delay(1000 * Math.pow(2, attempt)); // Exponential backoff
+      await delay(1000 * Math.pow(2, attempt));
     }
   }
 
@@ -120,47 +122,61 @@ async function generateImage(
   );
 }
 
-// Function to generate all frames sequentially
+// Function to generate all frames with AI-generated prompts
 export async function generateFrames(
-  prompt: string,
+  basePrompt: string,
   totalFrames: number,
   outputDir: string,
   onProgress?: ProgressCallback
 ): Promise<string[]> {
   console.log(`Starting generation of ${totalFrames} frames...`);
   const frames: string[] = new Array(totalFrames);
-  const batchSize = 5; // Process 5 frames concurrently
+  const batchSize = 5;
   const batches = Math.ceil(totalFrames / batchSize);
   let successfulFrames = 0;
+
+  // Initialize the story
+  await promptGenerator.initializeStory(basePrompt);
 
   for (let batchIndex = 0; batchIndex < batches; batchIndex++) {
     const start = batchIndex * batchSize;
     const end = Math.min(start + batchSize, totalFrames);
     const batchPromises: Promise<string>[] = [];
 
+    // Generate prompts and images for each frame in the batch
     for (let i = start; i < end; i++) {
-      batchPromises.push(generateImage(prompt, i, outputDir));
+      try {
+        const framePrompt = await promptGenerator.generateFramePrompt(
+          i + 1,
+          totalFrames
+        );
+        batchPromises.push(generateImage(framePrompt, i, outputDir));
+
+        if (onProgress) {
+          await onProgress({
+            framesGenerated: successfulFrames,
+            totalFrames,
+            currentFrame: i + 1,
+            stage: "generating",
+            currentPrompt: framePrompt,
+            storyProgress: promptGenerator.getFrameHistory(),
+          });
+        }
+
+        await delay(100); // Small delay between frame generations
+      } catch (error) {
+        console.error(`Failed to generate prompt for frame ${i}:`, error);
+      }
     }
 
     try {
       const batchResults = await Promise.allSettled(batchPromises);
 
-      // Process results and track failures
       batchResults.forEach((result, index) => {
         const frameIndex = start + index;
         if (result.status === "fulfilled") {
           frames[frameIndex] = result.value;
           successfulFrames++;
-
-          // Send progress update
-          if (onProgress) {
-            onProgress({
-              framesGenerated: successfulFrames,
-              totalFrames,
-              currentFrame: frameIndex + 1,
-              stage: "generating",
-            }).catch(console.error);
-          }
         } else {
           console.error(
             `Failed to generate frame ${frameIndex}:`,
@@ -169,7 +185,7 @@ export async function generateFrames(
         }
       });
 
-      // Add delay between batches to avoid rate limiting
+      // Add delay between batches
       if (batchIndex < batches - 1) {
         await delay(1000);
       }
@@ -207,7 +223,6 @@ export async function createVideo(
     );
   }
 
-  // Validate frames before creating video
   const files = await fs.readdir(imageDir);
   const frameFiles = files
     .filter((f) => f.startsWith("frame_") && f.endsWith(".jpg"))
@@ -223,7 +238,7 @@ export async function createVideo(
 
   return new Promise((resolve, reject) => {
     const args = [
-      "-y", // Overwrite output files
+      "-y",
       "-framerate",
       fps.toString(),
       "-pattern_type",
@@ -239,16 +254,12 @@ export async function createVideo(
       "-crf",
       "23",
       "-movflags",
-      "+faststart", // Enable streaming
+      "+faststart",
       outputPath,
     ];
 
     const process = spawn("ffmpeg", args);
-
-    const output = {
-      stdout: "",
-      stderr: "",
-    };
+    const output = { stdout: "", stderr: "" };
 
     process.stdout.on("data", (data) => {
       output.stdout += data.toString();

@@ -7,6 +7,7 @@ import {
   cleanup,
   GenerationProgress,
 } from "@/utils/videoUtils";
+import { promptGenerator } from "@/utils/promptGenerator";
 
 interface ProgressUpdate extends GenerationProgress {
   elapsedTime?: number;
@@ -40,24 +41,19 @@ export async function GET(req: NextRequest) {
         const startTime = Date.now();
 
         // Send updates function
-        const sendUpdate = async (update: ProgressUpdate) => {
+        const sendUpdate = async (update: Partial<ProgressUpdate>) => {
           const elapsedTime = (Date.now() - startTime) / 1000;
+          const storyFrames = promptGenerator.getFrameHistory();
+
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
                 ...update,
                 elapsedTime,
+                storyFrames,
               })}\n\n`
             )
           );
-        };
-
-        // Progress callback for frame generation
-        const onProgress = async (progress: GenerationProgress) => {
-          await sendUpdate({
-            ...progress,
-            message: `Generated frame ${progress.currentFrame} of ${progress.totalFrames}`,
-          });
         };
 
         // Ensure directories exist
@@ -68,7 +64,7 @@ export async function GET(req: NextRequest) {
 
         // Calculate number of frames needed
         const fps = 30;
-        const totalFrames = Math.round(duration * fps); // Ensure whole number of frames
+        const totalFrames = Math.round(duration * fps);
 
         try {
           console.log(
@@ -89,11 +85,15 @@ export async function GET(req: NextRequest) {
             prompt,
             totalFrames,
             framesDir,
-            onProgress
+            async (progress) => {
+              await sendUpdate({
+                ...progress,
+                message: `Generating frame ${progress.currentFrame} of ${progress.totalFrames}`,
+              });
+            }
           );
 
           if (frames.length < totalFrames * 0.9) {
-            // Allow 10% failure rate
             throw new Error(
               `Not enough frames generated. Got ${frames.length} of ${totalFrames} frames.`
             );
@@ -128,9 +128,13 @@ export async function GET(req: NextRequest) {
                 ? "All frames generated successfully"
                 : `Generated ${frames.length} of ${totalFrames} frames successfully`,
           });
+
+          // Clear prompt generator memory
+          promptGenerator.clearMemory();
         } catch (error) {
           // Clean up frames on error
           await cleanup(framesDir);
+          promptGenerator.clearMemory();
           throw error;
         }
       } catch (error) {
@@ -144,6 +148,7 @@ export async function GET(req: NextRequest) {
               error: errorMessage,
               stage: "generating",
               message: errorMessage,
+              storyFrames: [],
             })}\n\n`
           )
         );
