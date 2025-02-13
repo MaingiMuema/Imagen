@@ -6,6 +6,16 @@ import sharp from "sharp";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Progress update type
+export interface GenerationProgress {
+  framesGenerated: number;
+  totalFrames: number;
+  currentFrame: number;
+  stage: "generating" | "processing" | "complete";
+}
+
+type ProgressCallback = (progress: GenerationProgress) => Promise<void>;
+
 // Function to check if ffmpeg is available
 async function checkFFmpeg(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -21,16 +31,50 @@ async function checkFFmpeg(): Promise<boolean> {
   });
 }
 
+// Function to validate frame sequence
+async function validateFrameSequence(
+  dir: string,
+  totalFrames: number
+): Promise<boolean> {
+  const files = await fs.readdir(dir);
+  const frameFiles = files.filter(
+    (f) => f.startsWith("frame_") && f.endsWith(".jpg")
+  );
+
+  if (frameFiles.length !== totalFrames) {
+    console.error(
+      `Missing frames: expected ${totalFrames}, got ${frameFiles.length}`
+    );
+    return false;
+  }
+
+  // Check for sequential frame numbers
+  for (let i = 0; i < totalFrames; i++) {
+    const expectedFile = `frame_${String(i).padStart(4, "0")}.jpg`;
+    if (!frameFiles.includes(expectedFile)) {
+      console.error(`Missing frame: ${expectedFile}`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // Function to download an image from pollinations.ai with retry logic
-export async function generateImage(
+async function generateImage(
   prompt: string,
   index: number,
   outputDir: string,
-  retries = 10
+  retries = 3
 ): Promise<string> {
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
     `${prompt} ${index}`
-  )}?seed=${index}&nologo=true&quality=100&width=1920&height=1080`;
+  )}?seed=${index}&nologo=true&quality=100&width=1024&height=1024`;
+
+  const filename = path.join(
+    outputDir,
+    `frame_${String(index).padStart(4, "0")}.jpg`
+  );
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -55,26 +99,19 @@ export async function generateImage(
       // Ensure consistent image dimensions
       const processedBuffer = await sharp(buffer)
         .resize(1024, 1024, { fit: "contain", background: "black" })
-        .jpeg()
+        .jpeg({ quality: 90 })
         .toBuffer();
 
-      const filename = path.join(
-        outputDir,
-        `frame_${String(index).padStart(4, "0")}.jpg`
-      );
       await fs.writeFile(filename, processedBuffer);
+
+      // Verify the file was written
+      await fs.access(filename);
+
       return filename;
     } catch (error) {
-      if (attempt === retries - 1) {
-        console.error(
-          `Error generating image ${index} after ${retries} attempts:`,
-          error
-        );
-        throw error;
-      }
-      console.warn(
-        `Attempt ${attempt + 1} failed for image ${index}, retrying...`
-      );
+      console.error(`Attempt ${attempt + 1} failed for frame ${index}:`, error);
+      if (attempt === retries - 1) throw error;
+      await delay(1000 * Math.pow(2, attempt)); // Exponential backoff
     }
   }
 
@@ -83,47 +120,81 @@ export async function generateImage(
   );
 }
 
-// Function to generate images in batches
-export async function generateImagesInBatches(
+// Function to generate all frames sequentially
+export async function generateFrames(
   prompt: string,
   totalFrames: number,
   outputDir: string,
-  batchSize = 10
+  onProgress?: ProgressCallback
 ): Promise<string[]> {
-  const results: string[] = [];
+  console.log(`Starting generation of ${totalFrames} frames...`);
+  const frames: string[] = new Array(totalFrames);
+  const batchSize = 5; // Process 5 frames concurrently
   const batches = Math.ceil(totalFrames / batchSize);
+  let successfulFrames = 0;
 
-  for (let batch = 0; batch < batches; batch++) {
-    const start = batch * batchSize;
+  for (let batchIndex = 0; batchIndex < batches; batchIndex++) {
+    const start = batchIndex * batchSize;
     const end = Math.min(start + batchSize, totalFrames);
-    const batchPromises = [];
+    const batchPromises: Promise<string>[] = [];
 
     for (let i = start; i < end; i++) {
       batchPromises.push(generateImage(prompt, i, outputDir));
-      // Small delay between starting each request in the batch
-      await delay(100);
     }
 
-    const batchResults = await Promise.allSettled(batchPromises);
-    const successfulResults = batchResults
-      .filter(
-        (result): result is PromiseFulfilledResult<string> =>
-          result.status === "fulfilled"
-      )
-      .map((result) => result.value);
+    try {
+      const batchResults = await Promise.allSettled(batchPromises);
 
-    results.push(...successfulResults);
+      // Process results and track failures
+      batchResults.forEach((result, index) => {
+        const frameIndex = start + index;
+        if (result.status === "fulfilled") {
+          frames[frameIndex] = result.value;
+          successfulFrames++;
 
-    // Add delay between batches to avoid rate limiting
-    if (batch < batches - 1) {
-      await delay(2000);
+          // Send progress update
+          if (onProgress) {
+            onProgress({
+              framesGenerated: successfulFrames,
+              totalFrames,
+              currentFrame: frameIndex + 1,
+              stage: "generating",
+            }).catch(console.error);
+          }
+        } else {
+          console.error(
+            `Failed to generate frame ${frameIndex}:`,
+            result.reason
+          );
+        }
+      });
+
+      // Add delay between batches to avoid rate limiting
+      if (batchIndex < batches - 1) {
+        await delay(1000);
+      }
+    } catch (error) {
+      console.error(`Error in batch ${batchIndex}:`, error);
+      throw error;
     }
   }
 
-  return results;
+  // Filter out any undefined frames (failed generations)
+  const successfulFramesList = frames.filter(Boolean);
+
+  // Validate the frame sequence
+  const isValid = await validateFrameSequence(
+    outputDir,
+    successfulFramesList.length
+  );
+  if (!isValid) {
+    throw new Error("Frame sequence validation failed");
+  }
+
+  return successfulFramesList;
 }
 
-// Function to create video from images using native FFmpeg
+// Function to create video from images
 export async function createVideo(
   imageDir: string,
   outputPath: string,
@@ -134,6 +205,20 @@ export async function createVideo(
     throw new Error(
       "FFmpeg is not installed. Please install FFmpeg to create videos."
     );
+  }
+
+  // Validate frames before creating video
+  const files = await fs.readdir(imageDir);
+  const frameFiles = files
+    .filter((f) => f.startsWith("frame_") && f.endsWith(".jpg"))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0] || "0");
+      const numB = parseInt(b.match(/\d+/)?.[0] || "0");
+      return numA - numB;
+    });
+
+  if (frameFiles.length === 0) {
+    throw new Error("No frames found to create video");
   }
 
   return new Promise((resolve, reject) => {
@@ -153,6 +238,8 @@ export async function createVideo(
       "medium",
       "-crf",
       "23",
+      "-movflags",
+      "+faststart", // Enable streaming
       outputPath,
     ];
 
