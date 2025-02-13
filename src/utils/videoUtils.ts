@@ -30,7 +30,7 @@ export async function generateImage(
 ): Promise<string> {
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
     `${prompt} ${index}`
-  )}?seed=${index}&nologo=true&quality=100&width=1024&height=768`;
+  )}?seed=${index}&nologo=true&quality=100&width=1920&height=1080`;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
