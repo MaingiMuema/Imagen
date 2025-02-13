@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { StoryFrame } from "@/utils/promptGenerator";
 
 interface Progress {
@@ -28,6 +29,7 @@ export default function Home() {
     stage: "generating",
   });
 
+  // Format time as mm:ss
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -35,7 +37,7 @@ export default function Home() {
   };
 
   const getProgressInfo = () => {
-    if (!progress.totalFrames) return { percent: 0, text: "Starting..." };
+    if (!progress.totalFrames) return { percent: 0, text: "Initializing..." };
 
     const current = progress.currentFrame || 0;
     const total = progress.totalFrames;
@@ -51,7 +53,7 @@ export default function Home() {
 
     return {
       percent,
-      text: `Generating frame ${current}/${total} (${percent}%)`,
+      text: `Frame ${current}/${total}`,
     };
   };
 
@@ -113,144 +115,177 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <h1 className="text-4xl font-bold text-center text-gray-900">
-          AI Video Generator
-        </h1>
+    <main className="min-h-screen p-4 md:p-8 page-transition-enter-active">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="text-center space-y-2 animate-float">
+          <h1 className="text-5xl font-bold gradient-text">Imagen</h1>
+          <p className="text-gray-400">
+            Transform your stories into cinematic experiences
+          </p>
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-8">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div className="glass-panel p-6 rounded-xl hover-lift">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label
                     htmlFor="prompt"
-                    className="block text-sm font-medium text-gray-700 mb-2"
+                    className="block text-sm font-medium text-gray-300 mb-2"
                   >
-                    Enter your story concept
+                    Your Story Concept
                   </label>
-                  <textarea
-                    id="prompt"
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows={3}
-                    placeholder="Describe the story you want to generate..."
-                    required
-                  />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Be descriptive - the AI will create a visual story from your
-                    concept
+                  <div className="gradient-border">
+                    <textarea
+                      id="prompt"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-black/30 text-white placeholder-gray-500 focus:outline-none"
+                      rows={4}
+                      placeholder="Describe your story in vivid detail..."
+                      required
+                    />
+                  </div>
+                  <p className="mt-2 text-sm text-gray-400">
+                    Be descriptive - let AI bring your vision to life
                   </p>
                 </div>
 
                 <div>
                   <label
                     htmlFor="duration"
-                    className="block text-sm font-medium text-gray-700 mb-2"
+                    className="block text-sm font-medium text-gray-300 mb-2"
                   >
-                    Duration (seconds)
+                    Duration
                   </label>
-                  <input
-                    type="number"
-                    id="duration"
-                    value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
-                    min={2}
-                    max={300}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Min: 2 seconds, Max: 300 seconds (30 frames per second)
+                  <div className="gradient-border">
+                    <input
+                      type="number"
+                      id="duration"
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                      min={2}
+                      max={300}
+                      className="w-full p-3 rounded-lg bg-black/30 text-white focus:outline-none"
+                      required
+                    />
+                  </div>
+                  <p className="mt-2 text-sm text-gray-400">
+                    2-300 seconds • 30 frames per second
                   </p>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className={`w-full p-3 rounded-md text-white font-medium transition-colors ${
+                  className={`w-full p-4 rounded-lg font-medium transition-all duration-300 btn-glow ${
                     loading
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-500 hover:bg-blue-600"
+                      ? "bg-gray-700 cursor-not-allowed"
+                      : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
                   }`}
                 >
-                  {loading ? "Generating..." : "Generate Video"}
+                  {loading ? (
+                    <span className="animate-pulse-slow">Generating...</span>
+                  ) : (
+                    "Generate Video"
+                  )}
                 </button>
               </form>
             </div>
 
             {loading && (
-              <div className="bg-white p-6 rounded-lg shadow-md space-y-4">
-                <div className="flex justify-between text-sm font-medium text-blue-700">
-                  <span>{getProgressInfo().text}</span>
+              <div className="glass-panel p-6 rounded-xl space-y-4 hover-lift">
+                <div className="flex justify-between text-sm font-medium">
+                  <span className="text-blue-400">
+                    {getProgressInfo().text}
+                  </span>
                   {progress.elapsedTime !== undefined && (
-                    <span>Time: {formatTime(progress.elapsedTime)}</span>
+                    <span className="text-purple-400">
+                      {formatTime(progress.elapsedTime)}
+                    </span>
                   )}
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
                   <div
-                    className="bg-blue-600 h-full rounded-full transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 progress-animation"
                     style={{
                       width: `${getProgressInfo().percent}%`,
                     }}
                   />
                 </div>
-              </div>
-            )}
-
-            {error.message && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-red-700 font-medium">{error.message}</p>
-                {error.details && (
-                  <p className="mt-2 text-sm text-red-600">{error.details}</p>
+                {progress.currentPrompt && (
+                  <div className="bg-black/20 p-4 rounded-lg border border-gray-700">
+                    <p className="text-sm text-gray-300 loading-shimmer">
+                      {progress.currentPrompt}
+                    </p>
+                  </div>
                 )}
               </div>
             )}
-          </div>
-
-          <div className="space-y-8">
-            {progress.storyFrames && progress.storyFrames.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <h2 className="text-xl font-semibold mb-4">Story Progress</h2>
-                <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                  {progress.storyFrames.map((frame) => (
-                    <div
-                      key={frame.frameNumber}
-                      className="p-3 bg-gray-50 rounded-md border border-gray-100"
-                    >
-                      <p className="text-sm font-medium text-gray-700 mb-2">
-                        Frame {frame.frameNumber}
-                      </p>
-                      <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                        {frame.prompt}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {videoUrl && (
-              <div className="bg-white p-6 rounded-lg shadow-md space-y-4">
-                <h2 className="text-2xl font-bold text-gray-900">
+              <div className="glass-panel p-6 rounded-xl space-y-4 hover-lift">
+                <h2 className="text-xl font-semibold gradient-text">
                   Generated Video
                 </h2>
                 <video
                   controls
-                  className="w-full rounded-md shadow"
+                  className="w-full rounded-lg shadow-2xl"
                   src={videoUrl}
                 />
                 <a
                   href={videoUrl}
                   download
-                  className="block w-full p-3 text-center bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors font-medium"
+                  className="block w-full p-4 text-center rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 transition-all duration-300 font-medium btn-glow"
                 >
                   Download Video
                 </a>
               </div>
             )}
+
+            {error.message && (
+              <div className="glass-panel p-6 rounded-xl border border-red-500/50 hover-lift">
+                <p className="text-red-400 font-medium">{error.message}</p>
+                {error.details && (
+                  <p className="mt-2 text-sm text-red-300/70">
+                    {error.details}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <div className="glass-panel p-6 rounded-xl hover-lift">
+              <h2 className="text-xl font-semibold gradient-text">
+                Story Progress
+              </h2>
+              {progress.storyFrames && progress.storyFrames.length > 0 && (
+                <div className="space-y-4 max-h-[400px] overflow-y-auto story-scroll pr-2 mt-4">
+                  {progress.storyFrames.map((frame, index) => (
+                    <div
+                      key={frame.frameNumber}
+                      className={`frame-card glass-panel p-4 rounded-lg border border-gray-700/50 ${
+                        frame.frameNumber === progress.currentFrame
+                          ? "loading-shimmer border-blue-500/50"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-400">
+                          Frame {frame.frameNumber}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatTime(index / 30)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                        {frame.prompt}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
