@@ -15,6 +15,44 @@ export class PromptGenerator {
   private duration: number = 0;
   private frameTimeMs: number = 0;
 
+  // Transition types for different parts of the video
+  private transitionTypes = {
+    opening: ["fade in", "zoom in", "dramatic reveal"],
+    middle: [
+      "match cut",
+      "whip pan",
+      "dolly zoom",
+      "morph transition",
+      "cross dissolve",
+      "motion blur blend",
+    ],
+    closing: ["fade out", "zoom out", "dramatic pull back"],
+    standard: ["smooth blend", "continuous motion", "match on action"],
+  };
+
+  private getTransitionType(currentFrame: number, totalFrames: number): string {
+    if (currentFrame <= this.fps) {
+      // First second
+      return this.transitionTypes.opening[
+        Math.floor(Math.random() * this.transitionTypes.opening.length)
+      ];
+    } else if (currentFrame >= totalFrames - this.fps) {
+      // Last second
+      return this.transitionTypes.closing[
+        Math.floor(Math.random() * this.transitionTypes.closing.length)
+      ];
+    } else if (currentFrame % (this.fps * 2) === 0) {
+      // Every 2 seconds
+      return this.transitionTypes.middle[
+        Math.floor(Math.random() * this.transitionTypes.middle.length)
+      ];
+    } else {
+      return this.transitionTypes.standard[
+        Math.floor(Math.random() * this.transitionTypes.standard.length)
+      ];
+    }
+  }
+
   constructor() {
     this.together = new Together({
       apiKey:
@@ -27,10 +65,15 @@ export class PromptGenerator {
     userPrompt: string,
     totalFrames: number
   ): Promise<string> {
-    const previousContext = this.memory
-      .slice(-3) // Get last 3 frames for context
+    const previousFrames = this.memory.slice(-3); // Get last 3 frames for context
+    const previousContext = previousFrames
       .map((frame) => `Frame ${frame.frameNumber}: ${frame.context}`)
       .join("\n");
+
+    const transitionType = this.getTransitionType(
+      this.memory.length + 1,
+      totalFrames
+    );
 
     const currentTimeMs = (this.memory.length + 1) * this.frameTimeMs;
     const totalTimeMs = totalFrames * this.frameTimeMs;
@@ -51,10 +94,14 @@ export class PromptGenerator {
           this.fps
         }fps) when describing motion and changes
         
+        Transition Type: "${transitionType}"
+        - Apply this transition effect when moving from the previous frame
+        - Ensure visual elements support this transition style
+        
         Previous frames context:
         ${previousContext}
 
-        Generate a coherent next scene that progresses the story naturally, considering:
+        Generate a coherent next scene that progresses naturally with the specified transition, considering:
         
         Visual Elements and VFX:
         - Scene composition with dynamic camera work (dolly, pan, tracking shots)
