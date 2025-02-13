@@ -4,7 +4,7 @@ import { useState } from "react";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
-  const [duration, setDuration] = useState(10);
+  const [duration, setDuration] = useState(2);
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
   const [error, setError] = useState<{ message: string; details?: string }>({
@@ -98,13 +98,13 @@ export default function Home() {
                 id="duration"
                 value={duration}
                 onChange={(e) => setDuration(Number(e.target.value))}
-                min={10}
+                min={2}
                 max={30}
                 className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
               <p className="mt-1 text-sm text-gray-500">
-                Min: 10 seconds, Max: 30 seconds (Longer durations may take more
+                Min: 2 seconds, Max: 30 seconds (Longer durations may take more
                 time)
               </p>
             </div>

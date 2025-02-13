@@ -1,22 +1,36 @@
 import fs from "fs/promises";
 import path from "path";
-import ffmpeg from "ffmpeg-static";
 import { spawn } from "child_process";
 import axios from "axios";
 import sharp from "sharp";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Function to check if ffmpeg is available
+async function checkFFmpeg(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const process = spawn("ffmpeg", ["-version"]);
+
+    process.on("error", () => {
+      resolve(false);
+    });
+
+    process.on("close", (code) => {
+      resolve(code === 0);
+    });
+  });
+}
+
 // Function to download an image from pollinations.ai with retry logic
 export async function generateImage(
   prompt: string,
   index: number,
   outputDir: string,
-  retries = 3
+  retries = 10
 ): Promise<string> {
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
     `${prompt} ${index}`
-  )}?seed=${index}&nologo=true&quality=100&width=1024&height=1024`;
+  )}?seed=${index}&nologo=true&quality=100&width=1024&height=768`;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -109,20 +123,22 @@ export async function generateImagesInBatches(
   return results;
 }
 
-// Function to create video from images
+// Function to create video from images using native FFmpeg
 export async function createVideo(
   imageDir: string,
   outputPath: string,
   fps: number = 30
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!ffmpeg) {
-      reject(new Error("FFmpeg not found"));
-      return;
-    }
+  const hasFFmpeg = await checkFFmpeg();
+  if (!hasFFmpeg) {
+    throw new Error(
+      "FFmpeg is not installed. Please install FFmpeg to create videos."
+    );
+  }
 
+  return new Promise((resolve, reject) => {
     const args = [
-      "-y",
+      "-y", // Overwrite output files
       "-framerate",
       fps.toString(),
       "-pattern_type",
@@ -140,9 +156,20 @@ export async function createVideo(
       outputPath,
     ];
 
-    const process = spawn(ffmpeg, args);
+    const process = spawn("ffmpeg", args);
+
+    const output = {
+      stdout: "",
+      stderr: "",
+    };
+
+    process.stdout.on("data", (data) => {
+      output.stdout += data.toString();
+      console.log(`FFmpeg stdout: ${data}`);
+    });
 
     process.stderr.on("data", (data) => {
+      output.stderr += data.toString();
       console.error(`FFmpeg stderr: ${data}`);
     });
 
@@ -150,11 +177,22 @@ export async function createVideo(
       if (code === 0) {
         resolve(outputPath);
       } else {
-        reject(new Error(`FFmpeg process exited with code ${code}`));
+        const error = new Error(`FFmpeg process failed (exit code ${code})`);
+        error.cause = {
+          stdout: output.stdout,
+          stderr: output.stderr,
+          code,
+        };
+        reject(error);
       }
     });
 
     process.on("error", (err) => {
+      console.error("FFmpeg process error:", err);
+      err.cause = {
+        stdout: output.stdout,
+        stderr: output.stderr,
+      };
       reject(err);
     });
   });

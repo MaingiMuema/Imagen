@@ -9,7 +9,7 @@ import {
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, duration = 10 } = await req.json();
+    const { prompt, duration = 2 } = await req.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -18,9 +18,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (duration < 10 || duration > 30) {
+    if (duration < 2 || duration > 30) {
       return NextResponse.json(
-        { error: "Duration must be between 10 and 30 seconds" },
+        { error: "Duration must be between 2 and 30 seconds" },
         { status: 400 }
       );
     }
