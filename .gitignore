@@ -35,8 +35,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# generated content
-/public/frames/*
-/public/videos/*
-!public/frames/.gitkeep
-!public/videos/.gitkeep
+
