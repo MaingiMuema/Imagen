@@ -71,7 +71,7 @@ async function generateImage(
   prompt: string,
   index: number,
   outputDir: string,
-  retries = 10
+  retries = 20
 ): Promise<string> {
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
     `${prompt} ${index}`
@@ -92,7 +92,7 @@ async function generateImage(
         method: "get",
         url,
         responseType: "arraybuffer",
-        timeout: 60000,
+        timeout: 3600000,
         headers: {
           Accept: "image/jpeg",
           "User-Agent": "Mozilla/5.0",
@@ -242,38 +242,24 @@ export async function createVideo(
   }
 
   return new Promise((resolve, reject) => {
-    // Calculate transition points
-    const firstTransition = fps; // First second
-    const lastTransition = frameFiles.length - fps; // Last second
-
     // Build complex filtergraph for visual effects
     const filters = [
-      // Frame blending and motion
-      "tblend=all_mode=average,framestep=1",
-      `minterpolate=mi_mode=mci:me_mode=bidir:mc_mode=aobmc:mb_size=16:vsbmc=1:fps=${fps}`,
-
-      // Dynamic transitions
-      `fade=in:0:${firstTransition}`,
-      `fade=out:${lastTransition}:${frameFiles.length}`,
-
-      // Color grading and enhancement
-      "colorlevels=rimin=0.058:gimin=0.058:bimin=0.058:rimax=0.977:gimax=0.977:bimax=0.977",
-      "eq=saturation=1.2:contrast=1.1:brightness=0.05",
-      "hue=h=0:s=1",
+      // Color and visual enhancement
+      "colorlevels=rimin=0.058:gimin=0.058:bimin=0.058:rimax=0.977:gimax=0.977:bimax=0.977", // Enhance contrast
+      "eq=saturation=1.2:contrast=1.1:brightness=0.05", // Slight color boost
+      "unsharp=3:3:1.5:3:3:0.5", // Sharpen details
 
       // Cinematic effects
-      "unsharp=3:3:1.5:3:3:0.5",
-      "vignette=PI/4",
+      "vignette=PI/4", // Subtle vignette effect
+      "fps=" + fps, // Ensure consistent frame rate
 
-      // Light and glow effects
-      "curves=r='0/0 0.5/0.4 1/1':g='0/0 0.5/0.4 1/1':b='0/0 0.5/0.4 1/1'",
-      "gblur=sigma=0.5:steps=1",
+      // Light effects and glow
+      "curves=r='0/0 0.5/0.4 1/1':g='0/0 0.5/0.4 1/1':b='0/0 0.5/0.4 1/1'", // Enhance highlights
+      "gblur=sigma=0.5:steps=1", // Subtle bloom effect
 
-      // Motion enhancement
-      "tmix=frames=3:weights='0.5 0.3 0.2'",
-
-      // Final frame rate adjustment
-      "fps=" + fps,
+      // Temporal smoothing
+      "minterpolate=mi_mode=mci:me_mode=bidir:mc_mode=aobmc:mb_size=16:vsbmc=1:fps=" +
+        fps,
     ].join(",");
 
     const args = [
@@ -291,9 +277,9 @@ export async function createVideo(
       "-pix_fmt",
       "yuv420p",
       "-preset",
-      "slow", // Higher quality encoding
+      "medium",
       "-crf",
-      "17", // Even higher quality
+      "18", // Higher quality
       "-movflags",
       "+faststart",
       "-tune",
@@ -302,8 +288,6 @@ export async function createVideo(
       "high",
       "-level",
       "4.1",
-      "-x264-params",
-      "ref=6:deblock=1,1:analysys-mode=3:me=umh:subme=9:trellis=2:rc-lookahead=60", // Advanced encoding parameters
       outputPath,
     ];
 
